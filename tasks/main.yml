@@ -1,0 +1,39 @@
+---
+- name: Create temporary directory to store related files
+  tempfile:
+    state: directory
+    suffix: jenkins
+  register: jenkins_temp_dir
+
+- name: Interpolate Ansible variables
+  template:
+    src: docker-compose.yml.j2
+    dest: "{{ jenkins_temp_dir.path }}/docker-compose.yml"
+  when: "inventory_hostname == groups['integr8-docker-swarm-manager'][0]"
+
+- name: Copy Dockerfile
+  copy:
+    src: Dockerfile
+    dest: "{{ jenkins_temp_dir.path }}"
+
+- name: Deploy Jenkins plugins file
+  copy:
+    src: plugins.txt
+    dest: "{{ jenkins_temp_dir.path }}"
+
+- name: Deploy Jenkins configuration
+  copy:
+    src: jenkins.yaml
+    dest: "{{ jenkins_temp_dir.path }}"
+
+- name: Deploy jenkins in Swarm
+  command: 'docker stack deploy --compose-file {{ jenkins_temp_dir.path }}/docker-compose.yml jenkins'
+  when: "inventory_hostname == groups['integr8-docker-swarm-manager'][0]"
+
+- name: Record Traefik DNS
+  ara_record:
+    key: "jenkins_host"
+    value: "http://{{ jenkins_host }}"
+    type: url
+  tags:
+    - skip_ansible_lint
