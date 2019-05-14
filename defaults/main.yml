@@ -1,3 +1,3 @@
 ---
-jenkins_docker_image: "integr8/jenkins:development"
+jenkins_docker_image: "integr8/jenkins:latest"
 jenkins_host: "jenkins.integr8.me"
