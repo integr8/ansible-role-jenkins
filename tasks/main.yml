@@ -1,31 +1,68 @@
 ---
+- name: Install python virtualenv
+  package: 
+    name: python-virtualenv
+    state: present
+  when: "inventory_hostname == groups['swarm_manager'][0]"
+
+- name: Create temporary directory to store related files
+  tempfile:
+    state: directory
+    suffix: "jenkins_venv"
+  register: "jenkins_venv"
+  when: "inventory_hostname == groups['swarm_manager'][0]"
+
+- name: Install pyyaml inside of virtualenv
+  pip: 
+    name: pyyaml
+    version: 5.1.1
+    virtualenv: "{{ jenkins_venv.path }}"
+  when: "inventory_hostname == groups['swarm_manager'][0]"
+
+- name: Install jsondiff inside of virtualenv
+  pip: 
+    name: jsondiff
+    version: 1.1.2
+    virtualenv: "{{ jenkins_venv.path }}"
+  when: "inventory_hostname == groups['swarm_manager'][0]"
+  
 - name: Create temporary directory to store related files
   tempfile:
     state: directory
     suffix: jenkins
   register: jenkins_temp_dir
-  when: "inventory_hostname == groups['integr8-docker-swarm-manager'][0]"
+  when: "inventory_hostname == groups['swarm_manager'][0]"
 
 - name: Interpolate Ansible variables
   template:
     src: docker-compose.yml.j2
     dest: "{{ jenkins_temp_dir.path }}/docker-compose.yml"
-  when: "inventory_hostname == groups['integr8-docker-swarm-manager'][0]"
+  when: "inventory_hostname == groups['swarm_manager'][0]"
 
-- name: Deploy Jenkins configuration
+- name: Copy Jenkins configuration
   copy:
     src: jenkins.yaml
     dest: "{{ jenkins_temp_dir.path }}"
-  when: "inventory_hostname == groups['integr8-docker-swarm-manager'][0]"
+  when: "inventory_hostname == groups['swarm_manager'][0]"
 
-- name: Deploy jenkins in Swarm
-  command: 'docker stack deploy --compose-file {{ jenkins_temp_dir.path }}/docker-compose.yml jenkins'
-  when: "inventory_hostname == groups['integr8-docker-swarm-manager'][0]"
-
-- name: Record Traefik DNS
-  ara_record:
-    key: "jenkins_host"
-    value: "http://{{ jenkins_host }}"
-    type: url
+- name: Deploy services in Swarm
+  docker_stack:
+    state: present
+    name: jenkins
+    prune: yes
+    compose:
+      - "{{ jenkins_temp_dir.path }}//docker-compose.yml"
   tags:
-    - skip_ansible_lint
+    - deploy-stack
+  when: "inventory_hostname == groups['swarm_manager'][0]"
+  vars:
+    ansible_python_interpreter: "{{ jenkins_venv.path }}/bin/python"
+
+- name: Remove temporary directories
+  file:
+    path: "{{ item }}"
+    state: absent
+  with_items:
+    - "{{ jenkins_venv.path }}"
+    - "{{ jenkins_temp_dir.path }}"
+  when: "inventory_hostname == groups['swarm_manager'][0]"
